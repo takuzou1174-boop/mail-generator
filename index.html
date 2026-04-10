@@ -56,19 +56,23 @@
     </div>
 
     <script>
-        // デフォルト設定
-        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+        // 最新の安定モデルを指定
+        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
         let currentStance = "";
 
         function setStance(stance) {
             currentStance = stance;
-            document.querySelectorAll('.stance-btn').forEach(b => b.classList.remove('bg-blue-600', 'text-white'));
+            document.querySelectorAll('.stance-btn').forEach(b => {
+                b.classList.remove('bg-blue-600', 'text-white');
+                b.classList.add('bg-white', 'text-slate-700');
+            });
+            event.target.classList.remove('bg-white', 'text-slate-700');
             event.target.classList.add('bg-blue-600', 'text-white');
         }
 
         async function generateReply() {
             const mailText = document.getElementById('input-mail').value;
-            const apiKey = document.getElementById('api-key').value || "AIzaSyDcpiKxh1RnHfYQnH54KAAApN08tXcGwWs";
+            const apiKey = document.getElementById('api-key').value || ""; // キーは空でおくと環境変数から読み込まれます
             const outputArea = document.getElementById('output-area');
             const btn = document.getElementById('gen-btn');
 
@@ -81,7 +85,7 @@
             btn.textContent = "考え中...";
             outputArea.textContent = "生成しています...";
 
-            const prompt = `以下の受信メールに対して「${currentStance}」という立場で、失礼のない丁寧なビジネス返信メールを作成してください。本文のみ出力してください。\n\n【受信メール】\n${mailText}`;
+            const prompt = `あなたはプロのビジネスマンです。以下の受信メールに対して「${currentStance}」という立場で、失礼のない丁寧なビジネス返信メールを作成してください。本文のみを出力し、件名や署名は含めないでください。\n\n【受信メール】\n${mailText}`;
 
             try {
                 const response = await fetch(`${API_URL}?key=${apiKey}`, {
@@ -98,7 +102,7 @@
                 const resultText = data.candidates[0].content.parts[0].text;
                 outputArea.textContent = resultText;
             } catch (err) {
-                outputArea.textContent = "エラーが発生しました: " + err.message;
+                outputArea.textContent = "エラーが発生しました: " + err.message + "\n\n※APIキーの設定を確認してください。";
             } finally {
                 btn.disabled = false;
                 btn.textContent = "AIで返信文を作る";
@@ -107,13 +111,19 @@
 
         function copyText() {
             const text = document.getElementById('output-area').textContent;
+            if (!text || text === "生成しています...") return;
+            
             const el = document.createElement('textarea');
             el.value = text;
             document.body.appendChild(el);
             el.select();
             document.execCommand('copy');
             document.body.removeChild(el);
-            alert("コピーしました");
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = "コピー完了";
+            setTimeout(() => btn.textContent = originalText, 2000);
         }
     </script>
 </body>
