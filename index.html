@@ -107,7 +107,9 @@
     </div>
 
     <script>
+        // デフォルトのAPIキー
         const DEFAULT_API_KEY = "AIzaSyDcpiKxh1RnHfYQnH54KAAApN08tXcGwWs";
+        
         let extractedInfo = { company: '', name: '' };
         let currentStance = '';
         let currentTone = 'polite';
@@ -144,35 +146,58 @@
 
             aiBtn.disabled = true;
             aiBtn.textContent = "生成中...";
-            previewArea.innerHTML = '<div class="loading-pulse text-blue-400">AIが解析して返信を作成しています...</div>';
+            previewArea.innerHTML = '<div class="loading-pulse text-blue-400 text-center py-10 font-bold">AIが最適な返信文を作成しています...</div>';
 
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+            // 最新のプレビューモデル用エンドポイント
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`;
             
-            const prompt = `あなたはビジネスメールの達人です。
-相手からのメール: "${mail}"
-返信スタンス: ${currentStance} (トーン: ${currentTone})
-ルール: 返信の本文のみを出力してください。署名は不要です。`;
+            const prompt = `あなたはビジネスコミュニケーションのプロフェッショナルです。
+以下の受信メールに対し、指定されたスタンスとトーンで最適な返信文を作成してください。
+
+受信メール:
+"""
+${mail}
+"""
+
+返信スタンス: ${currentStance}
+希望トーン: ${currentTone === 'polite' ? '非常に丁寧で礼儀正しい' : '簡潔で効率的'}
+
+【ルール】
+- 返信の本文（挨拶、本文、結び）のみを出力してください。
+- 署名は不要です。
+- 件名は含めないでください。`;
 
             try {
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: prompt }]
+                        }]
+                    })
                 });
 
                 const data = await res.json();
                 
                 if (!res.ok) {
-                    throw new Error(data.error?.message || "通信エラー");
+                    throw new Error(data.error?.message || "API通信エラー");
                 }
 
-                aiGeneratedText = data.candidates[0].content.parts[0].text.trim();
-                updatePreview(true);
+                if (data.candidates && data.candidates[0].content.parts[0].text) {
+                    aiGeneratedText = data.candidates[0].content.parts[0].text.trim();
+                    updatePreview(true);
+                } else {
+                    throw new Error("返答が空でした。");
+                }
             } catch (e) {
-                previewArea.innerHTML = `<div class="text-red-400 p-4 border border-red-900/50 bg-red-900/10 rounded-xl">
-                    <p class="font-bold mb-2">エラーが発生しました</p>
-                    <p class="text-xs">原因: ${e.message}</p>
-                    <p class="text-[10px] mt-4 opacity-70 text-white">APIキーが無効、またはGoogle側で制限されている可能性があります。</p>
+                previewArea.innerHTML = `<div class="text-red-400 p-6 border border-red-900/50 bg-red-900/10 rounded-xl">
+                    <p class="font-bold mb-2 text-lg">エラーが発生しました</p>
+                    <p class="text-sm opacity-90 mb-4">原因: ${e.message}</p>
+                    <div class="text-xs text-white/60 space-y-1">
+                        <p>・APIキーが有効か確認してください</p>
+                        <p>・短時間の連続生成による制限の可能性があります</p>
+                    </div>
                 </div>`;
             } finally {
                 aiBtn.disabled = false;
@@ -207,7 +232,9 @@
         function setTone(tone) {
             currentTone = tone;
             document.querySelectorAll('.tone-btn').forEach(btn => btn.classList.remove('border-blue-500', 'text-blue-400', 'bg-blue-500/10'));
-            document.getElementById(`tone-${tone}`).classList.add('border-blue-500', 'text-blue-400', 'bg-blue-500/10');
+            const target = document.getElementById(`tone-${tone}`);
+            if(target) target.classList.add('border-blue-500', 'text-blue-400', 'bg-blue-500/10');
+            
             if (aiGeneratedText) generateWithAI();
             else updatePreview();
         }
