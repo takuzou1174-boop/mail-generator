@@ -107,7 +107,7 @@
     </div>
 
     <script>
-        // デフォルトのAPIキー
+        // Default API Key
         const DEFAULT_API_KEY = "AIzaSyDcpiKxh1RnHfYQnH54KAAApN08tXcGwWs";
         
         let extractedInfo = { company: '', name: '' };
@@ -115,7 +115,6 @@
         let currentTone = 'polite';
         let aiGeneratedText = '';
 
-        // Elements
         const incomingMailArea = document.getElementById('incoming-mail');
         const previewArea = document.getElementById('preview-area');
         const apiKeyInput = document.getElementById('api-key-input');
@@ -141,14 +140,12 @@
             const mail = incomingMailArea.value.trim();
             const key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
             
-            if (!mail || !currentStance) return alert("メール入力とスタンス選択が必要です。");
-            if (!key) return alert("APIキーがありません。");
+            if (!mail || !currentStance) return;
 
             aiBtn.disabled = true;
             aiBtn.textContent = "生成中...";
             previewArea.innerHTML = '<div class="loading-pulse text-blue-400 text-center py-10 font-bold">AIが最適な返信文を作成しています...</div>';
 
-            // 最新のプレビューモデル用エンドポイント
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`;
             
             const prompt = `あなたはビジネスコミュニケーションのプロフェッショナルです。
@@ -167,8 +164,21 @@ ${mail}
 - 署名は不要です。
 - 件名は含めないでください。`;
 
+            // Retry logic with exponential backoff
+            const fetchWithRetry = async (url, options, retries = 5, backoff = 1000) => {
+                try {
+                    const res = await fetch(url, options);
+                    if (!res.ok) throw new Error(await res.text());
+                    return res;
+                } catch (err) {
+                    if (retries <= 0) throw err;
+                    await new Promise(resolve => setTimeout(resolve, backoff));
+                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
+                }
+            };
+
             try {
-                const res = await fetch(url, {
+                const res = await fetchWithRetry(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -180,10 +190,6 @@ ${mail}
 
                 const data = await res.json();
                 
-                if (!res.ok) {
-                    throw new Error(data.error?.message || "API通信エラー");
-                }
-
                 if (data.candidates && data.candidates[0].content.parts[0].text) {
                     aiGeneratedText = data.candidates[0].content.parts[0].text.trim();
                     updatePreview(true);
@@ -269,12 +275,17 @@ ${mail}
         function copyContent() {
             const text = previewArea.textContent;
             if (text.length < 10) return;
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = event.target;
-                const old = btn.textContent;
-                btn.textContent = "完了";
-                setTimeout(() => btn.textContent = old, 1500);
-            });
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            
+            const btn = event.target;
+            const old = btn.textContent;
+            btn.textContent = "完了";
+            setTimeout(() => btn.textContent = old, 1500);
         }
     </script>
 </body>
