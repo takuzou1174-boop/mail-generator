@@ -56,8 +56,8 @@
     </div>
 
     <script>
-        // 最新の安定モデルを指定
-        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+        // プレビュー環境で安定動作する最新モデルを指定
+        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
         let currentStance = "";
 
         function setStance(stance) {
@@ -72,7 +72,7 @@
 
         async function generateReply() {
             const mailText = document.getElementById('input-mail').value;
-            const apiKey = document.getElementById('api-key').value || ""; // キーは空でおくと環境変数から読み込まれます
+            const apiKey = document.getElementById('api-key').value || ""; 
             const outputArea = document.getElementById('output-area');
             const btn = document.getElementById('gen-btn');
 
@@ -99,32 +99,9 @@
                 const data = await response.json();
                 if (data.error) throw new Error(data.error.message);
 
-                const resultText = data.candidates[0].content.parts[0].text;
+                const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "返信文を生成できませんでした。";
                 outputArea.textContent = resultText;
             } catch (err) {
                 outputArea.textContent = "エラーが発生しました: " + err.message + "\n\n※APIキーの設定を確認してください。";
             } finally {
-                btn.disabled = false;
-                btn.textContent = "AIで返信文を作る";
-            }
-        }
-
-        function copyText() {
-            const text = document.getElementById('output-area').textContent;
-            if (!text || text === "生成しています...") return;
-            
-            const el = document.createElement('textarea');
-            el.value = text;
-            document.body.appendChild(el);
-            el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-            
-            const btn = event.target;
-            const originalText = btn.textContent;
-            btn.textContent = "コピー完了";
-            setTimeout(() => btn.textContent = originalText, 2000);
-        }
-    </script>
-</body>
-</html>
+                btn.disabled =
