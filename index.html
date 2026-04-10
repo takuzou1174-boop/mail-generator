@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Reply Generator with Gemini</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        .preview-content { white-space: pre-wrap; word-break: break-all; }
+        @keyframes pulse-subtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .loading-pulse { animation: pulse-subtle 1.5s infinite; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div id="app" class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">
+                    Smart Reply Generator
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">Gemini AIが文脈に最適な返信文を生成します</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="resetAll()" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white border border-slate-700 rounded-lg hover:bg-slate-800 transition">
+                    すべてクリア
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-7 space-y-6">
+                <!-- Step 1: Input -->
+                <section class="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 shadow-xl">
+                    <label class="flex items-center text-sm font-semibold text-blue-400 mb-3 uppercase tracking-wider">
+                        <span class="mr-2 text-xs bg-blue-900/50 px-2 py-0.5 rounded border border-blue-700">1</span> 受信メールを入力
+                    </label>
+                    <textarea id="incoming-mail" oninput="analyzeMail()" class="w-full h-40 bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition custom-scrollbar" placeholder="相手から届いたメールを貼り付けてください..."></textarea>
+                    <div id="analysis-badge" class="mt-2 flex gap-2"></div>
+                </section>
+
+                <!-- Step 2: Stance -->
+                <section class="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 shadow-xl">
+                    <label class="flex items-center text-sm font-semibold text-blue-400 mb-3 uppercase tracking-wider">
+                        <span class="mr-2 text-xs bg-blue-900/50 px-2 py-0.5 rounded border border-blue-700">2</span> 返信スタンスを選択
+                    </label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <button onclick="selectStance('accept')" class="stance-btn p-3 text-xs font-bold rounded-xl border border-slate-700 bg-slate-900 hover:bg-blue-900/30 transition">承諾・快諾</button>
+                        <button onclick="selectStance('decline')" class="stance-btn p-3 text-xs font-bold rounded-xl border border-slate-700 bg-slate-900 hover:bg-red-900/30 transition">お断り</button>
+                        <button onclick="selectStance('meeting')" class="stance-btn p-3 text-xs font-bold rounded-xl border border-slate-700 bg-slate-900 hover:bg-indigo-900/30 transition">日程調整</button>
+                        <button onclick="selectStance('pending')" class="stance-btn p-3 text-xs font-bold rounded-xl border border-slate-700 bg-slate-900 hover:bg-orange-900/30 transition">検討・保留</button>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between">
+                        <div class="text-xs text-slate-400">AIに生成を依頼する</div>
+                        <button onclick="generateWithAI()" id="ai-generate-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl text-xs font-bold transition shadow-lg">
+                            AIで生成 (Gemini)
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Settings -->
+                <section class="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 shadow-xl">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-blue-400 mb-2 uppercase">Gemini APIキー</label>
+                                <input type="password" id="api-key-input" oninput="saveApiKey()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="AIza...">
+                            </div>
+                            <p id="key-status" class="text-[10px] text-slate-500 italic">※キーは設定済みです</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">署名</label>
+                            <textarea id="signature-input" oninput="saveSignature()" class="w-full h-24 bg-slate-900/50 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 outline-none" placeholder="あなたの署名"></textarea>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Preview Panel -->
+            <div class="lg:col-span-5 space-y-6">
+                <div class="sticky top-8 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+                    <div class="p-4 bg-slate-900/80 border-b border-slate-700 flex justify-between items-center">
+                        <div class="flex gap-1">
+                            <button onclick="setTone('polite')" id="tone-polite" class="tone-btn px-3 py-1 text-[10px] font-bold rounded-full border border-slate-700 text-slate-400">丁寧</button>
+                            <button onclick="setTone('short')" id="tone-short" class="tone-btn px-3 py-1 text-[10px] font-bold rounded-full border border-slate-700 text-slate-400">簡潔</button>
+                        </div>
+                        <button onclick="copyContent()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition">
+                            コピー
+                        </button>
+                    </div>
+                    <div id="preview-area" class="preview-content p-8 h-[500px] overflow-y-auto text-slate-200 text-sm leading-relaxed custom-scrollbar bg-slate-900/20">
+                        メールを入力してスタンスを選んでください。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_API_KEY = "AIzaSyDcpiKxh1RnHfYQnH54KAAApN08tXcGwWs";
+        let extractedInfo = { company: '', name: '' };
+        let currentStance = '';
+        let currentTone = 'polite';
+        let aiGeneratedText = '';
+
+        // Elements
+        const incomingMailArea = document.getElementById('incoming-mail');
+        const previewArea = document.getElementById('preview-area');
+        const apiKeyInput = document.getElementById('api-key-input');
+        const signatureInput = document.getElementById('signature-input');
+        const aiBtn = document.getElementById('ai-generate-btn');
+
+        window.onload = () => {
+            apiKeyInput.value = localStorage.getItem('reply_gen_key') || DEFAULT_API_KEY;
+            signatureInput.value = localStorage.getItem('reply_gen_sig') || '';
+            setTone('polite');
+        };
+
+        function saveApiKey() {
+            localStorage.setItem('reply_gen_key', apiKeyInput.value.trim());
+        }
+
+        function saveSignature() {
+            localStorage.setItem('reply_gen_sig', signatureInput.value);
+            updatePreview();
+        }
+
+        async function generateWithAI() {
+            const mail = incomingMailArea.value.trim();
+            const key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
+            
+            if (!mail || !currentStance) return alert("メール入力とスタンス選択が必要です。");
+            if (!key) return alert("APIキーがありません。");
+
+            aiBtn.disabled = true;
+            aiBtn.textContent = "生成中...";
+            previewArea.innerHTML = '<div class="loading-pulse text-blue-400">AIが解析して返信を作成しています...</div>';
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+            
+            const prompt = `あなたはビジネスメールの達人です。
+相手からのメール: "${mail}"
+返信スタンス: ${currentStance} (トーン: ${currentTone})
+ルール: 返信の本文のみを出力してください。署名は不要です。`;
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+
+                const data = await res.json();
+                
+                if (!res.ok) {
+                    throw new Error(data.error?.message || "通信エラー");
+                }
+
+                aiGeneratedText = data.candidates[0].content.parts[0].text.trim();
+                updatePreview(true);
+            } catch (e) {
+                previewArea.innerHTML = `<div class="text-red-400 p-4 border border-red-900/50 bg-red-900/10 rounded-xl">
+                    <p class="font-bold mb-2">エラーが発生しました</p>
+                    <p class="text-xs">原因: ${e.message}</p>
+                    <p class="text-[10px] mt-4 opacity-70 text-white">APIキーが無効、またはGoogle側で制限されている可能性があります。</p>
+                </div>`;
+            } finally {
+                aiBtn.disabled = false;
+                aiBtn.textContent = "AIで生成 (Gemini)";
+            }
+        }
+
+        function analyzeMail() {
+            const text = incomingMailArea.value;
+            const company = text.match(/(.{2,10}(?:株式会社|有限会社|合同会社))/);
+            const name = text.match(/([^\s\n]{1,10})(?:様|さん)/);
+            extractedInfo.company = company ? company[1] : '';
+            extractedInfo.name = name ? name[1] : '';
+            
+            const badgeArea = document.getElementById('analysis-badge');
+            badgeArea.innerHTML = '';
+            if (extractedInfo.company) badgeArea.innerHTML += `<span class="px-2 py-1 bg-slate-700 text-[10px] rounded border border-slate-600">${extractedInfo.company}</span>`;
+            if (extractedInfo.name) badgeArea.innerHTML += `<span class="px-2 py-1 bg-slate-700 text-[10px] rounded border border-slate-600">${extractedInfo.name}</span>`;
+            
+            aiGeneratedText = '';
+            updatePreview();
+        }
+
+        function selectStance(stance) {
+            currentStance = stance;
+            document.querySelectorAll('.stance-btn').forEach(btn => btn.classList.remove('border-blue-500', 'bg-blue-900/30'));
+            event.currentTarget.classList.add('border-blue-500', 'bg-blue-900/30');
+            aiGeneratedText = '';
+            updatePreview();
+        }
+
+        function setTone(tone) {
+            currentTone = tone;
+            document.querySelectorAll('.tone-btn').forEach(btn => btn.classList.remove('border-blue-500', 'text-blue-400', 'bg-blue-500/10'));
+            document.getElementById(`tone-${tone}`).classList.add('border-blue-500', 'text-blue-400', 'bg-blue-500/10');
+            if (aiGeneratedText) generateWithAI();
+            else updatePreview();
+        }
+
+        function updatePreview(isAI = false) {
+            let text = aiGeneratedText;
+            if (!isAI && currentStance) {
+                const t = {
+                    accept: `${extractedInfo.company || '〇〇株式会社'}\n${extractedInfo.name || '〇〇様'}\n\nお世話になっております。\nご依頼の件、承知いたしました。`,
+                    decline: `${extractedInfo.company || '〇〇株式会社'}\n${extractedInfo.name || '〇〇様'}\n\nお世話になっております。\nあいにく、今回は見送らせていただきます。`,
+                    meeting: `${extractedInfo.company || '〇〇株式会社'}\n${extractedInfo.name || '〇〇様'}\n\nお世話になっております。\n一度お打ち合わせのお時間をいただけますでしょうか。`,
+                    pending: `${extractedInfo.company || '〇〇株式会社'}\n${extractedInfo.name || '〇〇様'}\n\nお世話になっております。\n確認のうえ、改めてご連絡いたします。`
+                };
+                text = t[currentStance];
+            }
+            if (!text) {
+                previewArea.textContent = "メールを入力してスタンスを選んでください。";
+                return;
+            }
+            const sig = localStorage.getItem('reply_gen_sig') || '';
+            previewArea.textContent = text + (sig ? `\n\n--\n${sig}` : '');
+        }
+
+        function resetAll() {
+            incomingMailArea.value = '';
+            aiGeneratedText = '';
+            currentStance = '';
+            document.querySelectorAll('.stance-btn').forEach(btn => btn.classList.remove('border-blue-500', 'bg-blue-900/30'));
+            updatePreview();
+        }
+
+        function copyContent() {
+            const text = previewArea.textContent;
+            if (text.length < 10) return;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = event.target;
+                const old = btn.textContent;
+                btn.textContent = "完了";
+                setTimeout(() => btn.textContent = old, 1500);
+            });
+        }
+    </script>
+</body>
+</html>
